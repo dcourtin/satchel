@@ -38,6 +38,35 @@ thread_local! {
     static SIDEBAR: Rc<VecModel<SidebarItem>> = Rc::new(VecModel::default());
 }
 
+thread_local! {
+    /// Theme icon lookup + decoded images, shared by both panes (UI thread only).
+    static ICONS: RefCell<(Option<satchel_core::icons::IconResolver>, HashMap<PathBuf, Image>)> =
+        RefCell::new((None, HashMap::new()));
+}
+
+/// (16 px, 64 px) icons from the user's icon theme, decoded once per icon file.
+fn theme_icons(e: &Entry) -> Option<(Image, Image)> {
+    ICONS.with(|cell| {
+        let mut guard = cell.borrow_mut();
+        let (resolver, images) = &mut *guard;
+        let resolver = resolver.get_or_insert_with(|| {
+            let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+            satchel_core::icons::IconResolver::new(&home)
+        });
+        let small = resolver.resolve(e, 16)?;
+        let large = resolver.resolve(e, 64).unwrap_or_else(|| small.clone());
+        let mut load = |p: PathBuf| -> Option<Image> {
+            if let Some(img) = images.get(&p) {
+                return Some(img.clone());
+            }
+            let img = Image::load_from_path(&p).ok()?;
+            images.insert(p, img.clone());
+            Some(img)
+        };
+        Some((load(small)?, load(large)?))
+    })
+}
+
 /// Updates a model in place: rows that differ are replaced; length changes add/remove at the end.
 /// Never resets the whole model, so Slint keeps the existing item instances (and any mouse grab).
 fn update_model<T: Clone + PartialEq + 'static>(model: &VecModel<T>, new: Vec<T>) {
@@ -122,6 +151,7 @@ impl Pane {
     fn make_row(&self, vi: usize) -> FileRow {
         let e = &self.all[self.visible[vi]];
         let thumb = self.thumbs.get(&e.path).cloned();
+        let icon = theme_icons(e);
         FileRow {
             name: e.name.as_str().into(),
             size: if e.is_dir { format::items(e.size).into() } else { format::size(e.size).into() },
@@ -132,6 +162,9 @@ impl Pane {
             current: self.current == Some(vi),
             has_thumb: thumb.is_some(),
             thumb: thumb.unwrap_or_default(),
+            has_icon: icon.is_some(),
+            icon: icon.clone().map(|i| i.0).unwrap_or_default(),
+            icon_large: icon.map(|i| i.1).unwrap_or_default(),
         }
     }
 
@@ -141,11 +174,10 @@ impl Pane {
         self.visible = (0..self.all.len())
             .filter(|&i| needle.is_empty() || self.all[i].name.to_lowercase().contains(&needle))
             .collect();
-        if let Some(c) = self.current {
-            if c >= self.visible.len() {
+        if let Some(c) = self.current
+            && c >= self.visible.len() {
                 self.current = if self.visible.is_empty() { None } else { Some(self.visible.len() - 1) };
             }
-        }
         let rows: Vec<FileRow> = (0..self.visible.len()).map(|vi| self.make_row(vi)).collect();
         self.rows.set_vec(rows);
     }
@@ -286,13 +318,12 @@ impl App {
         }
         let img = Image::from_rgba8(buf);
         pane.thumbs.insert(path.clone(), img.clone());
-        if let Some(vi) = pane.visible.iter().position(|&i| pane.all[i].path == path) {
-            if let Some(mut row) = pane.rows.row_data(vi) {
+        if let Some(vi) = pane.visible.iter().position(|&i| pane.all[i].path == path)
+            && let Some(mut row) = pane.rows.row_data(vi) {
                 row.has_thumb = true;
                 row.thumb = img;
                 pane.rows.set_row_data(vi, row);
             }
-        }
     }
 
     // --------------------------------------------------------------- navigation
@@ -448,6 +479,16 @@ impl App {
         }
     }
 
+    /// Items per row: the grid column count in icon view (computed by Slint), 1 in details view.
+    fn row_step(&self, p: usize) -> isize {
+        if self.panes[p].view_mode != 0 {
+            return 1;
+        }
+        let ui = self.ui();
+        let cols = if p == 0 { ui.get_left_cols() } else { ui.get_right_cols() };
+        cols.max(1) as isize
+    }
+
     fn handle_key(&mut self, name: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
         let p = self.active;
         match (name, ctrl, alt) {
@@ -468,11 +509,13 @@ impl App {
                 true
             }
             ("Up", false, false) => {
-                self.move_current(-1, shift, None);
+                let step = self.row_step(p);
+                self.move_current(-step, shift, None);
                 true
             }
             ("Down", false, false) => {
-                self.move_current(1, shift, None);
+                let step = self.row_step(p);
+                self.move_current(step, shift, None);
                 true
             }
             ("Left", false, false) if self.panes[p].view_mode == 0 => {
@@ -728,6 +771,7 @@ impl App {
                     hidden: e.hidden,
                     has_preview: preview.is_some(),
                     preview: preview.unwrap_or_default(),
+                    ..Default::default()
                 }
             }
             many => {
@@ -741,6 +785,16 @@ impl App {
                 }
             }
         };
+        let icon_entry = match sel.as_slice() {
+            [] => Entry::from_path(&pane.path).ok(),
+            [e] => Some((*e).clone()),
+            _ => None,
+        };
+        let mut data = data;
+        if let Some((_, large)) = icon_entry.as_ref().and_then(theme_icons) {
+            data.icon = large;
+            data.has_icon = true;
+        }
         ui.set_inspector(data);
     }
 }
@@ -792,6 +846,41 @@ fn default_favorites(home: &Path) -> Vec<Place> {
     v
 }
 
+/// Window layout persisted between sessions (spec 05 §1): sidebar/inspector widths, pane split.
+fn layout_file() -> PathBuf {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config"));
+    base.join("satchel").join("layout")
+}
+
+fn load_layout(ui: &MainWindow) {
+    let Ok(text) = std::fs::read_to_string(layout_file()) else { return };
+    for line in text.lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        let Ok(v) = v.trim().parse::<f32>() else { continue };
+        match k.trim() {
+            "sidebar" => ui.set_sidebar_w(v.clamp(180.0, 320.0)),
+            "inspector" => ui.set_inspector_w(v.clamp(260.0, 420.0)),
+            "split" => ui.set_split(v.clamp(0.2, 0.8)),
+            _ => {}
+        }
+    }
+}
+
+fn save_layout(ui: &MainWindow) {
+    let path = layout_file();
+    let text = format!("sidebar={}\ninspector={}\nsplit={}\n", ui.get_sidebar_w(), ui.get_inspector_w(), ui.get_split());
+    // Write to a temp file then rename, so a crash never leaves a truncated file.
+    let tmp = path.with_extension("tmp");
+    let ok = path.parent().is_some_and(|d| std::fs::create_dir_all(d).is_ok())
+        && std::fs::write(&tmp, text).is_ok()
+        && std::fs::rename(&tmp, &path).is_ok();
+    if !ok {
+        trace!("could not save layout to {}", path.display());
+    }
+}
+
 /// After `drag_window`/`drag_resize_window` the compositor owns the pointer and the button release
 /// never reaches Slint, which would keep the drag TouchArea grabbed forever (every later click would
 /// restart a move). Synthesize the release once the current event is done.
@@ -823,13 +912,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         favorites = default_favorites(&home);
     }
     let pictures = ["Images", "Pictures"].iter().map(|d| home.join(d)).find(|p| p.is_dir()).unwrap_or_else(|| home.clone());
-    let start_left = std::env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| home.clone());
+    // Start-up folders: command line > last session > defaults (home | Pictures).
+    let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
+    let session = if args.is_empty() { load_session() } else { None };
+    let (start_left, left_mode, start_right, right_mode, start_active) = match session {
+        Some(s) => s,
+        None => (
+            args.first().cloned().unwrap_or_else(|| home.clone()),
+            1,
+            args.get(1).cloned().unwrap_or(pictures),
+            if args.get(1).is_some() { 1 } else { 0 },
+            0,
+        ),
+    };
 
     APP.with(|a| {
         *a.borrow_mut() = Some(App {
             ui: ui.as_weak(),
-            panes: [Pane::new(start_left, 1), Pane::new(pictures, 0)],
-            active: 0,
+            panes: [Pane::new(start_left, left_mode), Pane::new(start_right, right_mode)],
+            active: start_active,
             home: home.clone(),
             favorites,
             devices: places::mounted_devices(),
@@ -852,6 +953,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             EventResult::Propagate
         });
     }
+
+    load_layout(&ui);
+    let w = ui.as_weak();
+    ui.on_layout_changed(move || {
+        if let Some(ui) = w.upgrade() {
+            save_layout(&ui);
+        }
+    });
 
     // Models are bound once; afterwards they are only updated in place (see update_model).
     with_app(|a| {
@@ -989,6 +1098,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         a.load(1);
     });
 
+    with_app(|a| a.ui().set_active_pane(a.active as i32));
     ui.run()?;
+    with_app(|a| save_session(a));
     Ok(())
+}
+
+fn session_file() -> PathBuf {
+    layout_file().with_file_name("session")
+}
+
+/// Last session: folders and view modes of both panes, active pane (spec 03, session restore).
+fn load_session() -> Option<(PathBuf, i32, PathBuf, i32, usize)> {
+    let text = std::fs::read_to_string(session_file()).ok()?;
+    let mut map = HashMap::new();
+    for line in text.lines() {
+        if let Some((k, v)) = line.split_once('=') {
+            map.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    let dir = |k: &str| map.get(k).map(PathBuf::from).filter(|p| p.is_dir());
+    let mode = |k: &str| map.get(k).and_then(|v| v.parse::<i32>().ok()).filter(|m| (0..=1).contains(m)).unwrap_or(1);
+    let left = dir("left")?;
+    let right = dir("right").unwrap_or_else(|| left.clone());
+    let active = map.get("active").and_then(|v| v.parse::<usize>().ok()).filter(|a| *a < 2).unwrap_or(0);
+    Some((left, mode("left-mode"), right, mode("right-mode"), active))
+}
+
+fn save_session(a: &App) {
+    let path = session_file();
+    let text = format!(
+        "left={}\nleft-mode={}\nright={}\nright-mode={}\nactive={}\n",
+        a.panes[0].path.display(),
+        a.panes[0].view_mode,
+        a.panes[1].path.display(),
+        a.panes[1].view_mode,
+        a.active
+    );
+    let tmp = path.with_extension("tmp");
+    let ok = path.parent().is_some_and(|d| std::fs::create_dir_all(d).is_ok())
+        && std::fs::write(&tmp, text).is_ok()
+        && std::fs::rename(&tmp, &path).is_ok();
+    if !ok {
+        trace!("could not save session to {}", path.display());
+    }
 }

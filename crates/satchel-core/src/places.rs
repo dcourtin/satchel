@@ -22,11 +22,10 @@ pub fn read_xbel(path: &Path) -> Vec<Place> {
         if block.contains("<IsHidden>true</IsHidden>") {
             continue;
         }
-        if let Some(app) = tag(block, "OnlyInApp") {
-            if !app.is_empty() && app != "satchel" {
+        if let Some(app) = tag(block, "OnlyInApp")
+            && !app.is_empty() && app != "satchel" {
                 continue;
             }
-        }
         let path = PathBuf::from(percent_decode(local));
         let label = tag(block, "title").map(|t| translate_system(&unescape(&t)).to_string()).unwrap_or_else(|| {
             path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "/".into())

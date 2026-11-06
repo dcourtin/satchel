@@ -8,7 +8,7 @@ Mettre à jour ce fichier à la fin de chaque session : cocher, ajouter les déc
 - ☑ Toolchain : git, rustup (Rust 1.99.1 stable), base-devel
 - ☑ `git init`, `.gitignore` (inclure `docs/design/reference-forklift.png`, `target/`)
 - ☑ Workspace Cargo : `satchel-core`, `satchel-app`, Slint 1.18.1, build sans avertissement
-- ☐ Police Inter (facultative) : `sudo pacman -S inter-font`
+- ☑ Police Inter (`inter-font`, installée le 2026-11-06)
 
 ## Jalon 1 — Prototype visuel (objectif : « le rendu me plaît »)
 Spec : 05 en entier. Les données sont réelles mais en lecture seule.
@@ -18,7 +18,7 @@ Spec : 05 en entier. Les données sont réelles mais en lecture seule.
 - ☑ Barre latérale : Appareils (lecture de `/proc/mounts` + statvfs) et Favoris (lecture de `user-places.xbel`)
 - ☑ Deux panneaux : en-tête (fil d'Ariane, sous-ligne), liseré du panneau actif, Tab pour changer
 - ☑ Vue liste (ListView virtualisée) : nom, taille, date, tri par clic sur les colonnes, tri naturel (01 §4)
-- ◐ Vue icônes : grille, vignettes (cache freedesktop, sinon décodage sur 4 threads). Pas encore les icônes MIME du thème. Navigation au clavier en grille à faire
+- ☑ Vue icônes : grille, vignettes (cache freedesktop, sinon décodage sur 4 threads), icônes du thème (xdg-mime + freedesktop-icons, `satchel-core::icons`), haut/bas par ligne de grille
 - ☑ Navigation : double-clic ou Entrée pour entrer, Retour arrière ou Alt+↑ pour le parent, historique par panneau (03 §5)
 - ☑ Inspecteur : aperçu d'image, nom, type, section General (lecture seule)
 - ☐ Test de performance : 10 000 fichiers et plus, défilement fluide sur l'écran 4K à l'échelle 1.7 (05 §8.3)
@@ -62,7 +62,9 @@ Spec : 02 §7–13 et §17. **Tout dans `satchel-core`, avec des tests.**
 
 ## Notes du prototype (2026-11-06)
 - Déjà là, en plus de la feuille de route : sélection clic, Ctrl et Maj, flèches et Maj+flèches, Début/Fin, recherche en tapant (1 s, cycle sur la même lettre), Ctrl+A, Ctrl+H (fichiers cachés), Ctrl+1 et Ctrl+2/3 (modes de vue), F11 (inspecteur), Échap, Ctrl+F (recherche).
-- Il manque : défilement automatique vers l'élément courant au clavier, info-bulles, redimensionnement des séparateurs, persistance, police Inter.
+- Fait le 2026-11-06 (suite) : défilement automatique vers l'élément courant (liste et grille) ; séparateurs déplaçables (barre latérale 180–320, panneaux 20–80 %, inspecteur 260–420), largeurs mémorisées dans `~/.config/satchel/layout`.
+- Fait (peaufinage) : info-bulles de la barre d'outils (`global Tooltip`, délai 600 ms, avec les raccourcis), police Inter (`inter-font`), session (dossiers et modes des deux panneaux, panneau actif) dans `~/.config/satchel/session`, enregistrée à la fermeture normale ; icône du thème dans l'inspecteur.
+- Reste pour le prototype : vérifier à la main les info-bulles, les séparateurs et la restauration de session.
 - Capture d'écran pour vérifier : `spectacle -b -n -f -o fichier.png`, puis recadrer avec ffmpeg (Spectacle capture les deux écrans).
 
 ## Journal des décisions

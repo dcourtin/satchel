@@ -3,6 +3,7 @@
 
 pub mod entry;
 pub mod format;
+pub mod icons;
 pub mod places;
 pub mod sort;
 pub mod thumbs;

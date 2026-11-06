@@ -28,7 +28,7 @@ export component Inspector inherits Rectangle {
     background: Theme.bg-inspector;
     property <bool> general-open: true;
 
-    Rectangle { x: 0; width: 1px; background: Theme.separator; }
+
 
     VerticalLayout {
         padding: 12px;
@@ -57,11 +57,13 @@ export component Inspector inherits Rectangle {
                 source: root.data.preview;
                 image-fit: contain;
             }
-            if !root.data.has-preview: FileGlyph {
-                kind: root.data.kind;
-                size: 96px;
-                x: (parent.width - 96px) / 2;
-                y: (parent.height - 96px) / 2;
+            if !root.data.has-preview: Rectangle {
+                width: 112px;
+                height: 112px;
+                x: (parent.width - 112px) / 2;
+                y: (parent.height - 112px) / 2;
+                Image { width: 112px; height: 112px; source: root.data.icon; visible: root.data.has-icon; }
+                FileGlyph { kind: root.data.kind; size: 96px; visible: !root.data.has-icon; }
             }
         }
 

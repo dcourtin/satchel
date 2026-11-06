@@ -1,4 +1,4 @@
-import { Theme } from "theme.slint";
+import { Theme, Tooltip } from "theme.slint";
 import { Icon } from "icons.slint";
 import { PaneData, SidebarItem, InspectorData, FileRow, Crumb } from "types.slint";
 import { Sidebar } from "sidebar.slint";
@@ -23,8 +23,25 @@ component ToolButton inherits Rectangle {
         color: root.enabled ? Theme.fg-primary : Theme.fg-disabled;
     }
     ta := TouchArea {
-        enabled: root.enabled;
-        clicked => { root.clicked(); }
+        // Stay enabled so disabled buttons still get hover (for their tooltip); clicks are ignored.
+        clicked => {
+            Tooltip.shown = false;
+            if root.enabled { root.clicked(); }
+        }
+        changed has-hover => {
+            if !self.has-hover && Tooltip.text == root.tip { Tooltip.shown = false; }
+        }
+    }
+    // Show the tooltip after hovering for 600 ms (macOS-like delay).
+    Timer {
+        interval: 600ms;
+        running: ta.has-hover && !ta.pressed && root.tip != "" && !Tooltip.shown;
+        triggered => {
+            Tooltip.text = root.tip;
+            Tooltip.x = root.absolute-position.x + root.width / 2;
+            Tooltip.y = root.absolute-position.y + root.height + 8px;
+            Tooltip.shown = true;
+        }
     }
 }
 
@@ -34,6 +51,26 @@ component Capsule inherits Rectangle {
     height: 30px;
     HorizontalLayout {
         @children
+    }
+}
+
+// 1px separator with a wider invisible grab area. `dragged(dx)` reports horizontal movement.
+component Splitter inherits Rectangle {
+    callback dragged(length);
+    callback released;
+    width: 1px;
+    background: grab.has-hover || grab.pressed ? Theme.accent.with-alpha(0.6) : Theme.separator;
+    animate background { duration: Theme.fast; }
+    grab := TouchArea {
+        x: -3px;
+        width: 7px;
+        mouse-cursor: col-resize;
+        moved => {
+            if self.pressed { root.dragged(self.mouse-x - self.pressed-x); }
+        }
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.up { root.released(); }
+        }
     }
 }
 
@@ -63,6 +100,8 @@ export component MainWindow inherits Window {
     in property <[Crumb]> left-crumbs;
     in property <[Crumb]> right-crumbs;
     in property <int> left-mode: 1;
+    out property <int> left-cols: left-pane.grid-cols;
+    out property <int> right-cols: right-pane.grid-cols;
     in property <int> right-mode: 1;
     in property <[SidebarItem]> sidebar;
     in property <InspectorData> inspector;
@@ -91,8 +130,10 @@ export component MainWindow inherits Window {
     callback start-resize(int);
     callback todo(string);
 
-    property <length> sidebar-w: 212px;
-    property <length> inspector-w: 300px;
+    in-out property <length> sidebar-w: 212px;
+    in-out property <length> inspector-w: 300px;
+    in-out property <float> split: 0.5; // left pane share of the two panes
+    callback layout-changed(); // persist widths (spec 05 §1)
     property <int> active-mode: root.active-pane == 0 ? root.left-mode : root.right-mode;
 
     frame := Rectangle {
@@ -131,7 +172,10 @@ export component MainWindow inherits Window {
                     maximize-window => { root.maximize-window(); }
                     start-drag => { root.start-drag(); }
                 }
-                Rectangle { width: 1px; background: Theme.separator; }
+                Splitter {
+                    dragged(dx) => { root.sidebar-w = clamp(root.sidebar-w + dx, 180px, 320px); }
+                    released => { root.layout-changed(); }
+                }
 
                 VerticalLayout {
                     horizontal-stretch: 1;
@@ -167,21 +211,21 @@ export component MainWindow inherits Window {
                             }
                             Capsule {
                                 y: (parent.height - 30px) / 2;
-                                ToolButton { icon: "grid"; checked: root.active-mode == 0; clicked => { root.set-view-mode(0); keys.focus(); } }
-                                ToolButton { icon: "list"; checked: root.active-mode == 1; clicked => { root.set-view-mode(1); keys.focus(); } }
-                                ToolButton { icon: "columns"; enabled: false; }
+                                ToolButton { icon: "grid"; tip: "Icônes (Ctrl+1)"; checked: root.active-mode == 0; clicked => { root.set-view-mode(0); keys.focus(); } }
+                                ToolButton { icon: "list"; tip: "Liste (Ctrl+2)"; checked: root.active-mode == 1; clicked => { root.set-view-mode(1); keys.focus(); } }
+                                ToolButton { icon: "columns"; enabled: false; tip: "Colonnes (bientôt)"; }
                             }
                             Capsule {
                                 y: (parent.height - 30px) / 2;
-                                ToolButton { icon: "star"; clicked => { root.todo("Ajouter aux favoris"); } }
-                                ToolButton { icon: "connect"; enabled: false; }
+                                ToolButton { icon: "star"; tip: "Ajouter aux favoris"; clicked => { root.todo("Ajouter aux favoris"); } }
+                                ToolButton { icon: "connect"; enabled: false; tip: "Se connecter à un serveur (bientôt)"; }
                             }
                             Capsule {
                                 y: (parent.height - 30px) / 2;
-                                ToolButton { icon: "sync"; enabled: false; }
-                                ToolButton { icon: "copy"; clicked => { root.todo("Copier vers l'autre panneau"); } }
-                                ToolButton { icon: "folder-plus"; clicked => { root.todo("Nouveau dossier"); } }
-                                ToolButton { icon: "trash"; clicked => { root.todo("Mettre à la corbeille"); } }
+                                ToolButton { icon: "sync"; enabled: false; tip: "Synchroniser (bientôt)"; }
+                                ToolButton { icon: "copy"; tip: "Copier vers l'autre panneau (F5)"; clicked => { root.todo("Copier vers l'autre panneau"); } }
+                                ToolButton { icon: "folder-plus"; tip: "Nouveau dossier (F10)"; clicked => { root.todo("Nouveau dossier"); } }
+                                ToolButton { icon: "trash"; tip: "Mettre à la corbeille (Suppr)"; clicked => { root.todo("Mettre à la corbeille"); } }
                             }
                             Rectangle {
                                 y: (parent.height - 30px) / 2;
@@ -235,8 +279,12 @@ export component MainWindow inherits Window {
                     // ---- Two panes
                     HorizontalLayout {
                         vertical-stretch: 1;
-                        Pane {
-                            horizontal-stretch: 1;
+                        left-pane := Pane {
+                            // Share space by stretch factors (no binding loop): preferred width 0 so
+                            // all available width is distributed in the split ratio.
+                            preferred-width: 0px;
+                            min-width: 220px;
+                            horizontal-stretch: root.split;
                             data: root.left;
                             rows: root.left-rows;
                             crumbs: root.left-crumbs;
@@ -247,9 +295,14 @@ export component MainWindow inherits Window {
                             navigate(p) => { root.set-active(0); root.navigate(0, p); keys.focus(); }
                             sort-by(k) => { root.sort-by(0, k); }
                         }
-                        Rectangle { width: 1px; background: Theme.separator; }
-                        Pane {
-                            horizontal-stretch: 1;
+                        Splitter {
+                            dragged(dx) => { root.split = clamp(root.split + dx / (parent.width - 1px), 0.2, 0.8); }
+                            released => { root.layout-changed(); }
+                        }
+                        right-pane := Pane {
+                            preferred-width: 0px;
+                            min-width: 220px;
+                            horizontal-stretch: 1 - root.split;
                             data: root.right;
                             rows: root.right-rows;
                             crumbs: root.right-crumbs;
@@ -263,6 +316,10 @@ export component MainWindow inherits Window {
                     }
                 }
 
+                if root.inspector-visible: Splitter {
+                    dragged(dx) => { root.inspector-w = clamp(root.inspector-w - dx, 260px, 420px); }
+                    released => { root.layout-changed(); }
+                }
                 if root.inspector-visible: Inspector {
                     width: root.inspector-w;
                     data: root.inspector;
@@ -282,6 +339,31 @@ export component MainWindow inherits Window {
     if !root.maximized: EdgeResize { dir: 2; x: root.width - root.edge * 2; y: 0; width: root.edge * 2; height: root.edge * 2; mouse-cursor: ne-resize; start(d) => { root.start-resize(d); } }
     if !root.maximized: EdgeResize { dir: 6; x: 0; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: sw-resize; start(d) => { root.start-resize(d); } }
     if !root.maximized: EdgeResize { dir: 5; x: root.width - root.edge * 2; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: se-resize; start(d) => { root.start-resize(d); } }
+
+    // ---- Tooltip overlay (last child = drawn on top of everything)
+    tip := Rectangle {
+        property <length> w: tip-text.preferred-width + 16px;
+        x: clamp(Tooltip.x - self.w / 2, 6px, root.width - self.w - 6px);
+        y: Tooltip.y;
+        width: self.w;
+        height: 26px;
+        border-radius: 6px;
+        background: Theme.crust;
+        border-width: 1px;
+        border-color: Theme.surface1;
+        drop-shadow-blur: 8px;
+        drop-shadow-color: #00000066;
+        opacity: Tooltip.shown ? 1 : 0;
+        visible: self.opacity > 0;
+        animate opacity { duration: Theme.fast; easing: ease-out; }
+        tip-text := Text {
+            text: Tooltip.text;
+            font-size: 12px;
+            color: Theme.fg-primary;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
 
     init => { keys.focus(); }
 }

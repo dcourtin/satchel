@@ -41,7 +41,7 @@ export global Theme {
     out property <color> separator: surface0;
 
     // Typography
-    out property <string> font: "Noto Sans";
+    out property <string> font: "Inter"; // falls back to the system font if missing
 
     // Metrics
     out property <length> toolbar-h: 52px;
@@ -52,4 +52,12 @@ export global Theme {
     out property <length> radius-window: 12px;
     out property <duration> fast: 120ms;
     out property <duration> medium: 180ms;
+}
+
+// Single tooltip shared by the whole window (drawn last in MainWindow so it sits on top).
+export global Tooltip {
+    in-out property <string> text;
+    in-out property <length> x;  // horizontal center, window coordinates
+    in-out property <length> y;  // top edge, window coordinates
+    in-out property <bool> shown;
 }

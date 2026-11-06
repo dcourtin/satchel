@@ -8,6 +8,9 @@ export struct FileRow {
     current: bool,
     has-thumb: bool,
     thumb: image,
+    has-icon: bool,
+    icon: image,       // 16 px theme icon (details view)
+    icon-large: image, // 64 px theme icon (icons view)
 }
 
 export struct Crumb {
@@ -51,4 +54,6 @@ export struct InspectorData {
     hidden: bool,
     has-preview: bool,
     preview: image,
+    has-icon: bool,
+    icon: image, // theme icon shown when there is no preview
 }
