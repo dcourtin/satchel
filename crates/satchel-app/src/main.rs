@@ -3,6 +3,7 @@
 
 slint::include_modules!();
 
+mod actions;
 mod kinds;
 mod thumbs;
 
@@ -116,6 +117,8 @@ struct Pane {
     free: Option<u64>,
     thumbs: HashMap<PathBuf, Image>,
     select_after_load: Option<PathBuf>,
+    /// Items to select once the next listing arrives (after a file operation).
+    reselect: Vec<PathBuf>,
 }
 
 impl Pane {
@@ -141,6 +144,7 @@ impl Pane {
             free: None,
             thumbs: HashMap::new(),
             select_after_load: None,
+            reselect: Vec::new(),
         }
     }
 
@@ -290,6 +294,15 @@ impl App {
                 pane.selected.insert(target);
                 pane.refresh_flags();
             }
+        } else if !pane.reselect.is_empty() {
+            let wanted: Vec<PathBuf> = std::mem::take(&mut pane.reselect);
+            pane.selected = wanted.iter().filter(|w| pane.visible.iter().any(|&i| pane.all[i].path == **w)).cloned().collect();
+            pane.current = wanted.iter().find_map(|w| pane.visible.iter().position(|&i| pane.all[i].path == *w));
+            if pane.current.is_none() && !pane.visible.is_empty() {
+                pane.current = Some(0);
+            }
+            pane.anchor = pane.current;
+            pane.refresh_flags();
         } else if !pane.visible.is_empty() {
             pane.current = Some(0);
             pane.refresh_flags();
@@ -490,6 +503,9 @@ impl App {
     }
 
     fn handle_key(&mut self, name: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
+        if let Some(handled) = actions::key(self, name, ctrl, shift, alt) {
+            return handled;
+        }
         let p = self.active;
         match (name, ctrl, alt) {
             ("Tab", false, false) => {
@@ -1033,6 +1049,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         trace!("key {name:?} ctrl={ctrl} shift={shift} alt={alt}");
         with_app(|a| a.handle_key(name.as_str(), ctrl, shift, alt)).unwrap_or(false)
     });
+    // File operations (Jalon 2). Pointer-driven: deferred, see `defer`.
+    ui.on_action(|name| {
+        trace!("action {name}");
+        defer(move || {
+            with_app(|a| actions::action(a, name.as_str()));
+        });
+    });
+    ui.on_dialog_answer(|act, text, all| {
+        trace!("dialog_answer {act} all={all}");
+        defer(move || {
+            with_app(|a| actions::dialog_answer(a, act.as_str(), text.as_str(), all));
+        });
+    });
+    ui.on_cancel_job(actions::cancel_job);
+
     ui.on_todo(|what| {
         with_app(|a| {
             let p = a.active;

@@ -1,0 +1,317 @@
+// Modal dialogs for file operations (spec 02 §8–12): confirm, name input, copy/move conflict.
+// Always instantiated and toggled with `visible` (never `if`), see CLAUDE.md « Pièges Slint ».
+import { Theme } from "theme.slint";
+import { Icon } from "icons.slint";
+
+export struct DialogData {
+    visible: bool,
+    kind: int,          // 0 confirm/info, 1 name input, 2 conflict
+    title: string,
+    message: string,
+    detail: string,
+    danger: bool,       // primary action is destructive (red)
+    primary: string,    // labels; empty = hidden
+    secondary: string,
+    cancel: string,
+    input: string,      // name field (kind 1, or conflict rename)
+    sel-start: int,     // byte offsets of the preselected part of `input`
+    sel-end: int,
+    error: string,
+    // conflict (kind 2)
+    target-info: string,
+    source-info: string,
+    source-newer: bool,
+    target-newer: bool,
+    can-overwrite: bool,
+    can-merge: bool,
+    multi: bool,
+    same-item: bool,
+}
+
+export struct JobData {
+    visible: bool,
+    label: string,
+    detail: string,
+    progress: float,    // 0..1, < 0 = indeterminate
+}
+
+component DialogButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> accent;
+    in property <bool> danger;
+    callback clicked;
+    height: 30px;
+    min-width: label.preferred-width + 28px;
+    border-radius: 8px;
+    background: danger ? (ta.pressed ? Theme.red.darker(0.15) : Theme.red)
+        : accent ? (ta.pressed ? Theme.mauve.darker(0.15) : Theme.mauve)
+        : ta.pressed ? Theme.surface2 : ta.has-hover ? Theme.surface1 : Theme.surface0;
+    label := Text {
+        text: root.text;
+        font-size: 13px;
+        font-weight: root.accent || root.danger ? 600 : 400;
+        color: root.accent || root.danger ? Theme.crust : Theme.fg-primary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+component CheckRow inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    height: 22px;
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            y: 3px;
+            border-radius: 4px;
+            background: root.checked ? Theme.mauve : Theme.surface0;
+            border-width: root.checked ? 0px : 1px;
+            border-color: Theme.surface2;
+            Path {
+                visible: root.checked;
+                width: 12px;
+                height: 12px;
+                viewbox-width: 12;
+                viewbox-height: 12;
+                stroke: Theme.crust;
+                stroke-width: 1.8px;
+                fill: transparent;
+                commands: "M2.5 6.5 L5 9 L9.5 3.5";
+            }
+        }
+        Text { text: root.text; font-size: 12.5px; color: Theme.fg-primary; vertical-alignment: center; }
+    }
+    TouchArea { clicked => { root.checked = !root.checked; } }
+}
+
+component InfoRow inherits Rectangle {
+    in property <string> label;
+    in property <string> info;
+    in property <bool> newer;
+    height: 34px;
+    border-radius: 8px;
+    background: Theme.base;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Text { text: root.label; width: 64px; font-size: 12px; font-weight: 600; color: Theme.fg-secondary; vertical-alignment: center; }
+        Text { text: root.info; font-size: 12px; color: Theme.fg-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+        if root.newer: Rectangle {
+            width: newer-label.preferred-width + 12px;
+            height: 18px;
+            y: 8px;
+            border-radius: 9px;
+            background: Theme.green.with-alpha(0.18);
+            newer-label := Text { text: "plus récent"; font-size: 11px; color: Theme.green; }
+        }
+    }
+}
+
+export component ModalDialog inherits Rectangle {
+    in property <DialogData> data;
+    // action: "primary" | "secondary" | "cancel" | conflict: "overwrite" | "overwrite-older" | "skip"
+    //         | "rename" | "autorename" | "merge"
+    callback answer(string, string, bool); // action, text, apply-to-all
+    visible: data.visible;
+
+    property <bool> rename-mode;
+    property <bool> apply-all;
+    property <bool> show-input: (root.data.kind == 1) || (root.data.kind == 2 && root.rename-mode);
+
+    function reply(action: string) {
+        root.answer(action, field.text, root.apply-all);
+    }
+    function focus-input() {
+        field.focus();
+        field.set-selection-offsets(root.data.sel-start, root.data.sel-end);
+    }
+
+    changed data => {
+        if !root.data.visible {
+            root.rename-mode = false;
+            root.apply-all = false;
+        } else if root.data.kind == 1 {
+            field.text = root.data.input;
+            root.focus-input();
+        } else {
+            field.text = root.data.input;
+            scope.focus();
+        }
+    }
+
+    // Dim the window and swallow clicks behind the dialog.
+    background: Theme.crust.with-alpha(0.55);
+    TouchArea {}
+
+    card := Rectangle {
+        width: min(500px, root.width - 40px);
+        height: content.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: max(60px, (root.height - self.height) / 2 - 40px);
+        border-radius: 12px;
+        background: Theme.mantle;
+        border-width: 1px;
+        border-color: Theme.surface0;
+        drop-shadow-blur: 24px;
+        drop-shadow-offset-y: 6px;
+        drop-shadow-color: #00000080;
+
+        scope := FocusScope {
+            key-pressed(e) => {
+                if e.text == Key.Escape {
+                    if root.rename-mode { root.rename-mode = false; scope.focus(); return accept; }
+                    root.reply("cancel");
+                    return accept;
+                }
+                if e.text == Key.Return {
+                    if root.data.kind == 2 { root.reply(root.rename-mode ? (root.apply-all ? "autorename" : "rename") : "skip"); }
+                    else { root.reply("primary"); }
+                    return accept;
+                }
+                return reject;
+            }
+
+            content := VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+
+                Text {
+                    text: root.data.title;
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: root.data.danger ? Theme.red : Theme.fg-primary;
+                    wrap: word-wrap;
+                }
+                if root.data.message != "": Text {
+                    text: root.data.message;
+                    font-size: 13px;
+                    color: Theme.fg-primary;
+                    wrap: word-wrap;
+                }
+                if root.data.kind == 2 && !root.data.same-item: VerticalLayout {
+                    spacing: 6px;
+                    InfoRow { label: "Existant"; info: root.data.target-info; newer: root.data.target-newer; }
+                    InfoRow { label: "Nouveau"; info: root.data.source-info; newer: root.data.source-newer; }
+                }
+                if root.data.detail != "": Text {
+                    text: root.data.detail;
+                    font-size: 12px;
+                    color: Theme.fg-secondary;
+                    wrap: word-wrap;
+                }
+
+                // Name field (always instantiated; hidden when not needed)
+                Rectangle {
+                    visible: root.show-input;
+                    height: root.show-input ? 32px : 0px;
+                    border-radius: 8px;
+                    background: Theme.base;
+                    border-width: 1px;
+                    border-color: field.has-focus ? Theme.accent : Theme.surface1;
+                    field := TextInput {
+                        x: 10px;
+                        width: parent.width - 20px;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        font-size: 13px;
+                        color: Theme.fg-primary;
+                        selection-background-color: Theme.blue.with-alpha(0.4);
+                        single-line: true;
+                        accepted => {
+                            if root.data.kind == 2 { root.reply(root.apply-all ? "autorename" : "rename"); }
+                            else { root.reply("primary"); }
+                        }
+                    }
+                }
+                if root.data.error != "": Text {
+                    text: root.data.error;
+                    font-size: 12px;
+                    color: Theme.red;
+                    wrap: word-wrap;
+                }
+
+                if root.data.kind == 2 && root.data.multi && !root.data.same-item: CheckRow {
+                    text: "Appliquer à tous les conflits suivants";
+                    checked <=> root.apply-all;
+                }
+
+                // Buttons
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    padding-top: 4px;
+                    // generic dialogs (`if` is safe here: answers are deferred by the controller)
+                    if root.data.kind != 2 && root.data.cancel != "": DialogButton { text: root.data.cancel; clicked => { root.reply("cancel"); } }
+                    if root.data.kind != 2 && root.data.secondary != "": DialogButton { text: root.data.secondary; clicked => { root.reply("secondary"); } }
+                    if root.data.kind != 2 && root.data.primary != "": DialogButton { text: root.data.primary; accent: !root.data.danger; danger: root.data.danger; clicked => { root.reply("primary"); } }
+                    // conflict
+                    if root.data.kind == 2: DialogButton { text: "Annuler tout"; clicked => { root.reply("cancel"); } }
+                    if root.data.kind == 2 && !root.rename-mode: DialogButton { text: root.apply-all ? "Ignorer tout" : "Ignorer"; clicked => { root.reply("skip"); } }
+                    if root.data.kind == 2: DialogButton {
+                        text: root.rename-mode ? "Valider le nom" : root.apply-all ? "Renommer automatiquement" : "Renommer…";
+                        accent: root.rename-mode;
+                        clicked => {
+                            if root.apply-all && !root.rename-mode { root.reply("autorename"); }
+                            else if root.rename-mode { root.reply("rename"); }
+                            else { root.rename-mode = true; root.focus-input(); }
+                        }
+                    }
+                    if root.data.kind == 2 && root.data.can-merge && !root.rename-mode: DialogButton { text: "Fusionner"; accent: true; clicked => { root.reply("merge"); } }
+                    if root.data.kind == 2 && root.data.can-overwrite && root.data.multi && !root.rename-mode: DialogButton { text: "Remplacer si plus ancien"; clicked => { root.reply("overwrite-older"); } }
+                    if root.data.kind == 2 && root.data.can-overwrite && !root.rename-mode: DialogButton { text: root.apply-all ? "Remplacer tout" : "Remplacer"; danger: true; clicked => { root.reply("overwrite"); } }
+                }
+            }
+        }
+    }
+}
+
+// Progress pill for the running operation (bottom-right of the panes).
+export component JobToast inherits Rectangle {
+    in property <JobData> data;
+    callback cancel;
+    visible: data.visible;
+    width: 320px;
+    height: 58px;
+    border-radius: 10px;
+    background: Theme.mantle;
+    border-width: 1px;
+    border-color: Theme.surface0;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: #00000066;
+    VerticalLayout {
+        padding: 10px;
+        padding-left: 14px;
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: root.data.label; font-size: 12.5px; font-weight: 600; color: Theme.fg-primary; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
+            Rectangle {
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                background: cta.has-hover ? Theme.surface1 : transparent;
+                Path { width: 10px; height: 10px; viewbox-width: 10; viewbox-height: 10; stroke: Theme.fg-secondary; stroke-width: 1.4px; commands: "M2 2 L8 8 M8 2 L2 8"; }
+                cta := TouchArea { clicked => { root.cancel(); } }
+            }
+        }
+        Rectangle {
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.surface0;
+            Rectangle {
+                x: 0;
+                width: root.data.progress < 0 ? parent.width * 0.3 : parent.width * clamp(root.data.progress, 0, 1);
+                border-radius: 2px;
+                background: Theme.mauve;
+                animate width { duration: 150ms; }
+            }
+        }
+        Text { text: root.data.detail; font-size: 11px; color: Theme.fg-secondary; overflow: elide; }
+    }
+}

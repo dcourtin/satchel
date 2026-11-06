@@ -3952,6 +3952,7 @@ dependencies = [
  "freedesktop-icons",
  "md-5",
  "nix",
+ "rustix 1.1.6",
  "tempfile",
  "xdg-mime",
 ]

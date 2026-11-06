@@ -4,7 +4,7 @@ Comment=Breeze avec les pictos de fenêtre de Satchel
 Inherits=breeze-dark,breeze,hicolor
 FollowsColorScheme=true
 KDE-Extensions=.svg
-Directories=actions/symbolic
+Directories=actions/symbolic,places/16,devices/16
 
 [actions/symbolic]
 Context=Actions
@@ -12,3 +12,13 @@ Size=16
 MinSize=8
 MaxSize=512
 Type=Scalable
+
+[places/16]
+Context=Places
+Size=16
+Type=Fixed
+
+[devices/16]
+Context=Devices
+Size=16
+Type=Fixed

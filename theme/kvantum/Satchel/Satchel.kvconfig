@@ -102,6 +102,8 @@ interior=true
 text.iconspacing=3
 text.press.color=#CDD6F4
 text.toggle.color=#CDD6F4
+text.margin.top=3
+text.margin.bottom=3
 
 [RadioButton]
 inherits=PanelButtonCommand

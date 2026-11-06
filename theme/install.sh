@@ -22,6 +22,9 @@ rm -rf "$DATA/plasma/look-and-feel/org.satchel.desktop" && cp -r look-and-feel/o
 kwriteconfig6 --file "$CONF/Kvantum/kvantum.kvconfig" --group General --key theme Satchel
 # La barre d'état pleine largeur de Dolphin remplace la sous-ligne de Satchel.
 kwriteconfig6 --file dolphinrc --group General --key ShowStatusBar FullWidth
+# Barre latérale de Dolphin façon Satchel : icônes 16 px (les sections Récent/Distant se masquent
+# par clic droit, réglage stocké dans user-places.xbel partagé par KDE : non modifié ici).
+kwriteconfig6 --file dolphinrc --group PlacesPanel --key IconSize 16
 
 echo "Thème Satchel installé."
 if [ "${1:-}" = "--apply" ]; then

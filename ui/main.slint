@@ -4,8 +4,9 @@ import { PaneData, SidebarItem, InspectorData, FileRow, Crumb } from "types.slin
 import { Sidebar } from "sidebar.slint";
 import { Pane } from "pane.slint";
 import { Inspector } from "inspector.slint";
+import { ModalDialog, JobToast, DialogData, JobData } from "dialog.slint";
 
-export { PaneData, SidebarItem, InspectorData, FileRow, Crumb }
+export { PaneData, SidebarItem, InspectorData, FileRow, Crumb, DialogData, JobData }
 
 component ToolButton inherits Rectangle {
     in property <string> icon;
@@ -129,6 +130,13 @@ export component MainWindow inherits Window {
     callback start-drag();
     callback start-resize(int);
     callback todo(string);
+    // File operations (Jalon 2)
+    in property <DialogData> dialog;
+    in property <JobData> job;
+    in property <string> toast;
+    callback action(string);                       // "copy-other" | "move-other" | "new-folder" | "trash" | …
+    callback dialog-answer(string, string, bool);  // action, text, apply-to-all
+    callback cancel-job();
 
     in-out property <length> sidebar-w: 212px;
     in-out property <length> inspector-w: 300px;
@@ -145,13 +153,16 @@ export component MainWindow inherits Window {
 
         keys := FocusScope {
             key-pressed(e) => {
+                if root.dialog.visible { return reject; }
                 if root.key(
                     e.text == Key.Tab ? "Tab" : e.text == Key.Backtab ? "Tab" :
                     e.text == Key.UpArrow ? "Up" : e.text == Key.DownArrow ? "Down" :
                     e.text == Key.LeftArrow ? "Left" : e.text == Key.RightArrow ? "Right" :
                     e.text == Key.Home ? "Home" : e.text == Key.End ? "End" :
                     e.text == Key.Return ? "Return" : e.text == Key.Backspace ? "Backspace" :
-                    e.text == Key.Escape ? "Escape" : e.text == Key.F11 ? "F11" : e.text,
+                    e.text == Key.Escape ? "Escape" : e.text == Key.F11 ? "F11" :
+                    e.text == Key.F2 ? "F2" : e.text == Key.F5 ? "F5" : e.text == Key.F6 ? "F6" :
+                    e.text == Key.F10 ? "F10" : e.text == Key.Delete ? "Delete" : e.text,
                     e.modifiers.control, e.modifiers.shift, e.modifiers.alt) {
                     return accept;
                 }
@@ -223,9 +234,9 @@ export component MainWindow inherits Window {
                             Capsule {
                                 y: (parent.height - 30px) / 2;
                                 ToolButton { icon: "sync"; enabled: false; tip: "Synchroniser (bientôt)"; }
-                                ToolButton { icon: "copy"; tip: "Copier vers l'autre panneau (F5)"; clicked => { root.todo("Copier vers l'autre panneau"); } }
-                                ToolButton { icon: "folder-plus"; tip: "Nouveau dossier (F10)"; clicked => { root.todo("Nouveau dossier"); } }
-                                ToolButton { icon: "trash"; tip: "Mettre à la corbeille (Suppr)"; clicked => { root.todo("Mettre à la corbeille"); } }
+                                ToolButton { icon: "copy"; tip: "Copier vers l'autre panneau (F5)"; clicked => { root.action("copy-other"); keys.focus(); } }
+                                ToolButton { icon: "folder-plus"; tip: "Nouveau dossier (F10)"; clicked => { root.action("new-folder"); } }
+                                ToolButton { icon: "trash"; tip: "Mettre à la corbeille (Suppr)"; clicked => { root.action("trash"); keys.focus(); } }
                             }
                             Rectangle {
                                 y: (parent.height - 30px) / 2;
@@ -339,6 +350,44 @@ export component MainWindow inherits Window {
     if !root.maximized: EdgeResize { dir: 2; x: root.width - root.edge * 2; y: 0; width: root.edge * 2; height: root.edge * 2; mouse-cursor: ne-resize; start(d) => { root.start-resize(d); } }
     if !root.maximized: EdgeResize { dir: 6; x: 0; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: sw-resize; start(d) => { root.start-resize(d); } }
     if !root.maximized: EdgeResize { dir: 5; x: root.width - root.edge * 2; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: se-resize; start(d) => { root.start-resize(d); } }
+
+    // ---- Operation progress and short messages (bottom-right, above the panes)
+    JobToast {
+        x: root.width - self.width - (root.inspector-visible ? root.inspector-w : 0px) - 16px;
+        y: root.height - self.height - 16px;
+        data: root.job;
+        cancel => { root.cancel-job(); }
+    }
+    toast-pill := Rectangle {
+        visible: root.toast != "" && !root.job.visible;
+        x: root.width - self.width - (root.inspector-visible ? root.inspector-w : 0px) - 16px;
+        y: root.height - self.height - 16px;
+        width: min(420px, toast-text.preferred-width + 28px);
+        height: 34px;
+        border-radius: 10px;
+        background: Theme.mantle;
+        border-width: 1px;
+        border-color: Theme.surface0;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #00000066;
+        toast-text := Text {
+            width: parent.width - 28px;
+            text: root.toast;
+            font-size: 12.5px;
+            color: Theme.fg-primary;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    // ---- Modal dialog (covers the whole window)
+    ModalDialog {
+        width: root.width;
+        height: root.height;
+        data: root.dialog;
+        answer(a, t, all) => { root.dialog-answer(a, t, all); }
+        changed visible => { if !self.visible { keys.focus(); } }
+    }
 
     // ---- Tooltip overlay (last child = drawn on top of everything)
     tip := Rectangle {

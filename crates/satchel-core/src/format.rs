@@ -46,6 +46,17 @@ pub fn date(t: std::time::SystemTime) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, (rem % 3600) / 60)
 }
 
+/// Local time as "YYYY-MM-DDThh:mm:ss" (Trash spec DeletionDate format).
+pub fn iso_datetime(t: std::time::SystemTime) -> String {
+    let secs = match t.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(_) => 0,
+    } + local_offset_secs();
+    let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
+    let rem = secs.rem_euclid(86_400);
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}", rem / 3600, (rem % 3600) / 60, rem % 60)
+}
+
 /// Local UTC offset, read once from the TZ database via libc-free heuristic:
 /// uses `date +%z` style info from /etc/localtime is complex, so we rely on the `TZ_OFFSET_SECS`
 /// override or fall back to parsing `/etc/localtime` lazily. TODO: replace with `jiff`/`time` crate.
