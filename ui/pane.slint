@@ -1,0 +1,314 @@
+import { Theme } from "theme.slint";
+import { Icon, FileGlyph } from "icons.slint";
+import { PaneData, FileRow, Crumb } from "types.slint";
+import { ListView } from "std-widgets.slint";
+
+component ColumnHeader inherits Rectangle {
+    in property <string> label;
+    in property <bool> sorted;
+    in property <bool> asc;
+    in property <bool> right-aligned;
+    callback clicked;
+    TouchArea { clicked => { root.clicked(); } }
+    HorizontalLayout {
+        alignment: right-aligned ? end : start;
+        spacing: 4px;
+        Text {
+            text: label;
+            vertical-alignment: center;
+            font-size: 11.5px;
+            font-weight: 600;
+            font-family: Theme.font;
+            color: sorted ? Theme.fg-primary : Theme.fg-tertiary;
+        }
+        if sorted: Icon {
+            name: asc ? "sort-up" : "sort-down";
+            size: 12px;
+            color: Theme.fg-tertiary;
+            y: (parent.height - 12px) / 2;
+        }
+    }
+}
+
+export component Pane inherits Rectangle {
+    in property <PaneData> data;
+    in property <[FileRow]> rows;
+    in property <[Crumb]> crumbs;
+    in property <int> view-mode; // 0 = icons, 1 = details
+    in property <bool> active;
+    callback row-pressed(int, bool, bool); // index, ctrl, shift
+    callback row-activated(int);
+    callback background-pressed;
+    callback navigate(string);
+    callback sort-by(int);
+
+    background: Theme.bg-window;
+    clip: true;
+
+    property <length> size-w: 84px;
+    property <length> date-w: 132px;
+    property <length> pad: 12px;
+
+    // ---- Active-pane accent bar (05 §5)
+    Rectangle {
+        x: root.pad;
+        y: 0;
+        width: root.width - 2 * root.pad;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.accent;
+        opacity: root.active ? 1 : 0;
+        animate opacity { duration: Theme.fast; easing: ease-out; }
+    }
+
+    VerticalLayout {
+        // ---- Header: root icon + breadcrumb + status line
+        Rectangle {
+            height: Theme.header-h;
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                padding-top: 8px;
+                spacing: 10px;
+                Icon {
+                    name: root.data.root-icon;
+                    size: 24px;
+                    color: Theme.fg-primary;
+                    y: (parent.height - 24px) / 2 + 4px;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 2px;
+                        for c[i] in root.crumbs: HorizontalLayout {
+                            spacing: 2px;
+                            if i > 0: Text {
+                                text: "›";
+                                font-size: 13px;
+                                color: Theme.fg-tertiary;
+                                vertical-alignment: center;
+                            }
+                            Rectangle {
+                                border-radius: 5px;
+                                background: cta.has-hover ? Theme.bg-capsule : transparent;
+                                HorizontalLayout {
+                                    padding-left: 4px;
+                                    padding-right: 4px;
+                                    Text {
+                                        text: c.label;
+                                        font-size: 13px;
+                                        font-weight: 500;
+                                        font-family: Theme.font;
+                                        color: Theme.fg-primary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                cta := TouchArea { clicked => { root.navigate(c.path); } }
+                            }
+                        }
+                    }
+                    Text {
+                        x: 4px;
+                        text: root.data.status;
+                        font-size: 11.5px;
+                        font-family: Theme.font;
+                        color: Theme.fg-secondary;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+        if root.data.message != "": Rectangle {
+            height: 30px;
+            background: Theme.red.with-alpha(0.12);
+            Text {
+                text: root.data.message;
+                color: Theme.red;
+                font-size: 12px;
+                font-family: Theme.font;
+            }
+        }
+
+        // ---- Details (list) view
+        if root.view-mode == 1: VerticalLayout {
+            Rectangle {
+                height: Theme.colheader-h;
+                HorizontalLayout {
+                    padding-left: root.pad + 30px;
+                    padding-right: root.pad + 8px;
+                    spacing: 8px;
+                    ColumnHeader {
+                        horizontal-stretch: 1;
+                        label: "Nom";
+                        sorted: root.data.sort-key == 0;
+                        asc: root.data.sort-asc;
+                        clicked => { root.sort-by(0); }
+                    }
+                    ColumnHeader {
+                        width: root.size-w;
+                        label: "Taille";
+                        right-aligned: true;
+                        sorted: root.data.sort-key == 1;
+                        asc: root.data.sort-asc;
+                        clicked => { root.sort-by(1); }
+                    }
+                    ColumnHeader {
+                        width: root.date-w;
+                        label: "Date de modification";
+                        sorted: root.data.sort-key == 2;
+                        asc: root.data.sort-asc;
+                        clicked => { root.sort-by(2); }
+                    }
+                }
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.separator;
+                }
+            }
+            lv := ListView {
+                vertical-stretch: 1;
+                for row[i] in root.rows: Rectangle {
+                    height: Theme.row-h;
+                    Rectangle {
+                        x: 6px;
+                        width: parent.width - 12px;
+                        border-radius: 6px;
+                        background: row.selected ? (root.active ? Theme.bg-row-selected : Theme.bg-row-selected-inactive)
+                            : rta.has-hover ? Theme.bg-row-hover : transparent;
+                        border-width: row.current && root.active && !row.selected ? 1px : 0px;
+                        border-color: Theme.accent.with-alpha(0.5);
+                    }
+                    rta := TouchArea {
+                        pointer-event(e) => {
+                            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                root.row-pressed(i, e.modifiers.control, e.modifiers.shift);
+                            }
+                        }
+                        double-clicked => { root.row-activated(i); }
+                    }
+                    HorizontalLayout {
+                        padding-left: root.pad + 8px;
+                        padding-right: root.pad + 8px;
+                        spacing: 8px;
+                        FileGlyph { kind: row.kind; size: 16px; y: (parent.height - 16px) / 2; }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: row.name;
+                            vertical-alignment: center;
+                            font-size: 13px;
+                            font-family: Theme.font;
+                            color: Theme.fg-primary;
+                            overflow: elide;
+                        }
+                        Text {
+                            width: root.size-w;
+                            text: row.size;
+                            horizontal-alignment: right;
+                            vertical-alignment: center;
+                            font-size: 12.5px;
+                            font-family: Theme.font;
+                            color: Theme.fg-secondary;
+                        }
+                        Text {
+                            width: root.date-w;
+                            text: row.date;
+                            vertical-alignment: center;
+                            font-size: 12.5px;
+                            font-family: Theme.font;
+                            color: Theme.fg-secondary;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Icons (grid) view
+        if root.view-mode == 0: Rectangle {
+            vertical-stretch: 1;
+            property <int> cols: max(1, Math.floor((self.width - 2 * root.pad) / 150px));
+            property <length> cell-w: (self.width - 2 * root.pad) / cols;
+            property <length> cell-h: 156px;
+            fl := Flickable {
+                content-height: Math.ceil(root.rows.length / cols) * cell-h + 16px;
+                for row[i] in root.rows: Rectangle {
+                    x: root.pad + Math.mod(i, cols) * cell-w;
+                    y: 8px + Math.floor(i / cols) * cell-h;
+                    width: cell-w;
+                    height: cell-h;
+                    tile := Rectangle {
+                        x: (parent.width - 124px) / 2;
+                        y: 4px;
+                        width: 124px;
+                        height: 112px;
+                        border-radius: 8px;
+                        background: row.selected ? (root.active ? Theme.bg-row-selected : Theme.bg-row-selected-inactive)
+                            : ita.has-hover ? Theme.bg-row-hover : transparent;
+                        if row.has-thumb: Rectangle {
+                            // keep the image's aspect ratio inside a 104×92 box
+                            property <float> ratio: row.thumb.width / max(1, row.thumb.height);
+                            width: ratio > 104 / 92 ? 104px : 92px * ratio;
+                            height: ratio > 104 / 92 ? 104px / ratio : 92px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 6px;
+                            clip: true;
+                            drop-shadow-blur: 3px;
+                            drop-shadow-offset-y: 1px;
+                            drop-shadow-color: #00000059;
+                            Image {
+                                width: parent.width;
+                                height: parent.height;
+                                source: row.thumb;
+                                image-fit: cover;
+                            }
+                        }
+                        if !row.has-thumb: FileGlyph {
+                            kind: row.kind;
+                            size: 72px;
+                            x: (parent.width - 72px) / 2;
+                            y: (parent.height - 72px) / 2;
+                        }
+                    }
+                    Rectangle {
+                        y: tile.y + tile.height + 6px;
+                        x: (parent.width - self.width) / 2;
+                        width: min(parent.width - 8px, label.preferred-width + 12px);
+                        height: 20px;
+                        border-radius: 4px;
+                        background: row.selected && root.active ? Theme.label-selected-bg : transparent;
+                        label := Text {
+                            width: parent.width - 12px;
+                            text: row.name;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12.5px;
+                            font-family: Theme.font;
+                            color: row.selected && root.active ? Theme.label-selected-fg : Theme.fg-primary;
+                            overflow: elide;
+                        }
+                    }
+                    ita := TouchArea {
+                        pointer-event(e) => {
+                            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                                root.row-pressed(i, e.modifiers.control, e.modifiers.shift);
+                            }
+                        }
+                        double-clicked => { root.row-activated(i); }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.data.empty: Text {
+        y: Theme.header-h + 80px;
+        text: "Dossier vide";
+        color: Theme.fg-tertiary;
+        font-size: 13px;
+        font-family: Theme.font;
+    }
+}

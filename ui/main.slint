@@ -1,0 +1,287 @@
+import { Theme } from "theme.slint";
+import { Icon } from "icons.slint";
+import { PaneData, SidebarItem, InspectorData, FileRow, Crumb } from "types.slint";
+import { Sidebar } from "sidebar.slint";
+import { Pane } from "pane.slint";
+import { Inspector } from "inspector.slint";
+
+export { PaneData, SidebarItem, InspectorData, FileRow, Crumb }
+
+component ToolButton inherits Rectangle {
+    in property <string> icon;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    in property <string> tip;
+    callback clicked;
+    width: 34px;
+    height: 30px;
+    border-radius: 7px;
+    background: !enabled ? transparent : checked ? Theme.bg-capsule-pressed : ta.pressed ? Theme.bg-capsule-pressed : ta.has-hover ? Theme.bg-capsule-hover : transparent;
+    Icon {
+        name: root.icon;
+        size: 18px;
+        color: root.enabled ? Theme.fg-primary : Theme.fg-disabled;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Capsule inherits Rectangle {
+    background: Theme.bg-capsule;
+    border-radius: 8px;
+    height: 30px;
+    HorizontalLayout {
+        @children
+    }
+}
+
+component EdgeResize inherits TouchArea {
+    in property <int> dir;
+    callback start(int);
+    pointer-event(e) => {
+        if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { root.start(root.dir); }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "Satchel";
+    icon: @image-url("../assets/satchel.svg");
+    no-frame: true;
+    background: transparent;
+    preferred-width: 1440px;
+    preferred-height: 860px;
+    min-width: 900px;
+    min-height: 520px;
+    default-font-family: Theme.font;
+
+    in property <PaneData> left;
+    in property <PaneData> right;
+    in property <[FileRow]> left-rows;
+    in property <[FileRow]> right-rows;
+    in property <[Crumb]> left-crumbs;
+    in property <[Crumb]> right-crumbs;
+    in property <int> left-mode: 1;
+    in property <int> right-mode: 1;
+    in property <[SidebarItem]> sidebar;
+    in property <InspectorData> inspector;
+    in-out property <int> active-pane: 0;
+    in property <bool> can-back;
+    in property <bool> can-forward;
+    in property <string> title-text;
+    in-out property <bool> inspector-visible: true;
+    in-out property <string> search-text;
+
+    callback row-pressed(int, int, bool, bool);   // pane, index, ctrl, shift
+    callback row-activated(int, int);
+    callback navigate(int, string);
+    callback sort-by(int, int);
+    callback set-active(int);
+    callback sidebar-clicked(string);
+    callback go-back();
+    callback go-forward();
+    callback set-view-mode(int);
+    callback search-changed(string);
+    callback key(string, bool, bool, bool) -> bool; // name, ctrl, shift, alt
+    callback close-window();
+    callback minimize-window();
+    callback maximize-window();
+    callback start-drag();
+    callback start-resize(int);
+    callback todo(string);
+
+    property <length> sidebar-w: 212px;
+    property <length> inspector-w: 300px;
+    property <int> active-mode: root.active-pane == 0 ? root.left-mode : root.right-mode;
+
+    frame := Rectangle {
+        border-radius: root.maximized ? 0 : Theme.radius-window;
+        clip: true;
+        background: Theme.bg-window;
+        border-width: root.maximized ? 0 : 1px;
+        border-color: Theme.surface0;
+
+        keys := FocusScope {
+            key-pressed(e) => {
+                if root.key(
+                    e.text == Key.Tab ? "Tab" : e.text == Key.Backtab ? "Tab" :
+                    e.text == Key.UpArrow ? "Up" : e.text == Key.DownArrow ? "Down" :
+                    e.text == Key.LeftArrow ? "Left" : e.text == Key.RightArrow ? "Right" :
+                    e.text == Key.Home ? "Home" : e.text == Key.End ? "End" :
+                    e.text == Key.Return ? "Return" : e.text == Key.Backspace ? "Backspace" :
+                    e.text == Key.Escape ? "Escape" : e.text == Key.F11 ? "F11" : e.text,
+                    e.modifiers.control, e.modifiers.shift, e.modifiers.alt) {
+                    return accept;
+                }
+                if e.modifiers.control && (e.text == "f" || e.text == "F") {
+                    search.focus();
+                    return accept;
+                }
+                return reject;
+            }
+
+            HorizontalLayout {
+                Sidebar {
+                    width: root.sidebar-w;
+                    items: root.sidebar;
+                    item-clicked(p) => { root.sidebar-clicked(p); keys.focus(); }
+                    close-window => { root.close-window(); }
+                    minimize-window => { root.minimize-window(); }
+                    maximize-window => { root.maximize-window(); }
+                    start-drag => { root.start-drag(); }
+                }
+                Rectangle { width: 1px; background: Theme.separator; }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    // ---- Unified toolbar
+                    Rectangle {
+                        height: Theme.toolbar-h;
+                        background: Theme.bg-toolbar;
+                        TouchArea {
+                            pointer-event(e) => {
+                                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { root.start-drag(); }
+                            }
+                            double-clicked => { root.maximize-window(); }
+                        }
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 10px;
+                            alignment: stretch;
+                            Capsule {
+                                y: (parent.height - 30px) / 2;
+                                ToolButton { icon: "back"; enabled: root.can-back; tip: "Précédent (Alt+←)"; clicked => { root.go-back(); keys.focus(); } }
+                                ToolButton { icon: "forward"; enabled: root.can-forward; tip: "Suivant (Alt+→)"; clicked => { root.go-forward(); keys.focus(); } }
+                            }
+                            Text {
+                                text: root.title-text;
+                                font-size: 15px;
+                                font-weight: 600;
+                                color: Theme.fg-primary;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                                min-width: 80px;
+                            }
+                            Capsule {
+                                y: (parent.height - 30px) / 2;
+                                ToolButton { icon: "grid"; checked: root.active-mode == 0; clicked => { root.set-view-mode(0); keys.focus(); } }
+                                ToolButton { icon: "list"; checked: root.active-mode == 1; clicked => { root.set-view-mode(1); keys.focus(); } }
+                                ToolButton { icon: "columns"; enabled: false; }
+                            }
+                            Capsule {
+                                y: (parent.height - 30px) / 2;
+                                ToolButton { icon: "star"; clicked => { root.todo("Ajouter aux favoris"); } }
+                                ToolButton { icon: "connect"; enabled: false; }
+                            }
+                            Capsule {
+                                y: (parent.height - 30px) / 2;
+                                ToolButton { icon: "sync"; enabled: false; }
+                                ToolButton { icon: "copy"; clicked => { root.todo("Copier vers l'autre panneau"); } }
+                                ToolButton { icon: "folder-plus"; clicked => { root.todo("Nouveau dossier"); } }
+                                ToolButton { icon: "trash"; clicked => { root.todo("Mettre à la corbeille"); } }
+                            }
+                            Rectangle {
+                                y: (parent.height - 30px) / 2;
+                                width: 220px;
+                                height: 30px;
+                                border-radius: 8px;
+                                background: Theme.bg-capsule;
+                                border-width: search.has-focus ? 1px : 0px;
+                                border-color: Theme.accent;
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    spacing: 8px;
+                                    Icon { name: "search"; size: 16px; color: Theme.fg-secondary; y: (parent.height - 16px) / 2; }
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            x: 0;
+                                            visible: search.text == "";
+                                            text: "Rechercher";
+                                            color: Theme.fg-tertiary;
+                                            font-size: 13px;
+                                            vertical-alignment: center;
+                                        }
+                                        search := TextInput {
+                                            width: parent.width;
+                                            vertical-alignment: center;
+                                            font-size: 13px;
+                                            color: Theme.fg-primary;
+                                            selection-background-color: Theme.blue.with-alpha(0.4);
+                                            text <=> root.search-text;
+                                            edited => { root.search-changed(self.text); }
+                                            key-pressed(e) => {
+                                                if e.text == Key.Escape {
+                                                    self.text = "";
+                                                    root.search-changed("");
+                                                    keys.focus();
+                                                    return accept;
+                                                }
+                                                if e.text == Key.Return || e.text == Key.DownArrow { keys.focus(); return accept; }
+                                                return reject;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Rectangle { y: parent.height - 1px; height: 1px; background: Theme.separator; }
+                    }
+
+                    // ---- Two panes
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        Pane {
+                            horizontal-stretch: 1;
+                            data: root.left;
+                            rows: root.left-rows;
+                            crumbs: root.left-crumbs;
+                            view-mode: root.left-mode;
+                            active: root.active-pane == 0;
+                            row-pressed(i, c, s) => { root.set-active(0); root.row-pressed(0, i, c, s); keys.focus(); }
+                            row-activated(i) => { root.row-activated(0, i); }
+                            navigate(p) => { root.set-active(0); root.navigate(0, p); keys.focus(); }
+                            sort-by(k) => { root.sort-by(0, k); }
+                        }
+                        Rectangle { width: 1px; background: Theme.separator; }
+                        Pane {
+                            horizontal-stretch: 1;
+                            data: root.right;
+                            rows: root.right-rows;
+                            crumbs: root.right-crumbs;
+                            view-mode: root.right-mode;
+                            active: root.active-pane == 1;
+                            row-pressed(i, c, s) => { root.set-active(1); root.row-pressed(1, i, c, s); keys.focus(); }
+                            row-activated(i) => { root.row-activated(1, i); }
+                            navigate(p) => { root.set-active(1); root.navigate(1, p); keys.focus(); }
+                            sort-by(k) => { root.sort-by(1, k); }
+                        }
+                    }
+                }
+
+                if root.inspector-visible: Inspector {
+                    width: root.inspector-w;
+                    data: root.inspector;
+                }
+            }
+        }
+    }
+
+    // ---- Resize edges (client-side decorations). Directions match winit ResizeDirection order:
+    // 0 E, 1 N, 2 NE, 3 NW, 4 S, 5 SE, 6 SW, 7 W
+    property <length> edge: 5px;
+    if !root.maximized: EdgeResize { dir: 1; x: root.edge; y: 0; width: root.width - 2 * root.edge; height: root.edge; mouse-cursor: n-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 4; x: root.edge; y: root.height - root.edge; width: root.width - 2 * root.edge; height: root.edge; mouse-cursor: s-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 7; x: 0; y: root.edge; width: root.edge; height: root.height - 2 * root.edge; mouse-cursor: w-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 0; x: root.width - root.edge; y: root.edge; width: root.edge; height: root.height - 2 * root.edge; mouse-cursor: e-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 3; x: 0; y: 0; width: root.edge * 2; height: root.edge * 2; mouse-cursor: nw-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 2; x: root.width - root.edge * 2; y: 0; width: root.edge * 2; height: root.edge * 2; mouse-cursor: ne-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 6; x: 0; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: sw-resize; start(d) => { root.start-resize(d); } }
+    if !root.maximized: EdgeResize { dir: 5; x: root.width - root.edge * 2; y: root.height - root.edge * 2; width: root.edge * 2; height: root.edge * 2; mouse-cursor: se-resize; start(d) => { root.start-resize(d); } }
+
+    init => { keys.focus(); }
+}

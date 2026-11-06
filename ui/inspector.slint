@@ -1,0 +1,105 @@
+import { Theme } from "theme.slint";
+import { Icon, FileGlyph } from "icons.slint";
+import { InspectorData } from "types.slint";
+
+component KeyValue inherits Rectangle {
+    in property <string> key;
+    in property <string> value;
+    height: 26px;
+    HorizontalLayout {
+        spacing: 12px;
+        Text { text: key; color: Theme.fg-secondary; font-size: 12px; font-family: Theme.font; vertical-alignment: center; }
+        Text {
+            horizontal-stretch: 1;
+            text: value;
+            color: Theme.fg-primary;
+            font-size: 12px;
+            font-family: Theme.font;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.separator; }
+}
+
+export component Inspector inherits Rectangle {
+    in property <InspectorData> data;
+    background: Theme.bg-inspector;
+    property <bool> general-open: true;
+
+    Rectangle { x: 0; width: 1px; background: Theme.separator; }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+        alignment: start;
+
+        // Tabs
+        HorizontalLayout {
+            height: Theme.toolbar-h - 12px;
+            alignment: center;
+            spacing: 28px;
+            Icon { name: "info"; color: Theme.accent; size: 20px; y: (parent.height - 20px) / 2; }
+            Icon { name: "compare"; color: Theme.fg-disabled; size: 20px; y: (parent.height - 20px) / 2; }
+            Icon { name: "warning"; color: Theme.fg-disabled; size: 20px; y: (parent.height - 20px) / 2; }
+        }
+
+        // Preview
+        Rectangle {
+            height: (root.width - 24px) * 0.75;
+            border-radius: 10px;
+            background: Theme.bg-window;
+            clip: true;
+            if root.data.has-preview: Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.data.preview;
+                image-fit: contain;
+            }
+            if !root.data.has-preview: FileGlyph {
+                kind: root.data.kind;
+                size: 96px;
+                x: (parent.width - 96px) / 2;
+                y: (parent.height - 96px) / 2;
+            }
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.data.name;
+                font-size: 15px;
+                font-weight: 600;
+                font-family: Theme.font;
+                color: Theme.fg-primary;
+                overflow: elide;
+            }
+            Text {
+                text: root.data.kind-text;
+                font-size: 12px;
+                font-family: Theme.font;
+                color: Theme.fg-secondary;
+                overflow: elide;
+            }
+        }
+
+        // Section General
+        Rectangle {
+            height: 30px;
+            TouchArea { clicked => { root.general-open = !root.general-open; } }
+            HorizontalLayout {
+                Text { text: "Général"; font-size: 13px; font-weight: 600; font-family: Theme.font; color: Theme.fg-primary; vertical-alignment: center; horizontal-stretch: 1; }
+                Icon { name: root.general-open ? "chevron-down" : "chevron-right"; size: 14px; color: Theme.fg-secondary; y: (parent.height - 14px) / 2; }
+            }
+        }
+        if root.general-open && root.data.mode != 1: VerticalLayout {
+            KeyValue { key: "Chemin"; value: root.data.path; }
+            KeyValue { key: "Taille"; value: root.data.size; }
+            KeyValue { key: "Modifié"; value: root.data.modified; }
+            if root.data.created != "": KeyValue { key: "Créé"; value: root.data.created; }
+            if root.data.extension != "": KeyValue { key: "Extension"; value: root.data.extension; }
+            KeyValue { key: "Caché"; value: root.data.hidden ? "Oui" : "Non"; }
+        }
+    }
+}

@@ -1,0 +1,55 @@
+// Design tokens — docs/spec/05-design.md §2. Never hard-code colors in components.
+export global Theme {
+    // Catppuccin Mocha palette
+    out property <color> crust: #11111b;
+    out property <color> mantle: #181825;
+    out property <color> base: #1e1e2e;
+    out property <color> surface0: #313244;
+    out property <color> surface1: #45475a;
+    out property <color> surface2: #585b70;
+    out property <color> overlay0: #6c7086;
+    out property <color> overlay1: #7f849c;
+    out property <color> subtext0: #a6adc8;
+    out property <color> text: #cdd6f4;
+    out property <color> mauve: #cba6f7;
+    out property <color> blue: #89b4fa;
+    out property <color> red: #f38ba8;
+    out property <color> peach: #fab387;
+    out property <color> yellow: #f9e2af;
+    out property <color> green: #a6e3a1;
+
+    // Semantic tokens
+    out property <color> bg-sidebar: mantle.with-alpha(0.97);
+    out property <color> bg-window: base;
+    out property <color> bg-toolbar: base;
+    out property <color> bg-inspector: mantle;
+    out property <color> bg-capsule: surface0;
+    out property <color> bg-capsule-hover: surface1;
+    out property <color> bg-capsule-pressed: surface2;
+    out property <color> bg-row-hover: text.with-alpha(0.04);
+    out property <color> bg-row-selected: blue.with-alpha(0.22);
+    out property <color> bg-row-selected-inactive: text.with-alpha(0.08);
+    out property <color> bg-sidebar-selected: text.with-alpha(0.10);
+    out property <color> label-selected-bg: blue;
+    out property <color> label-selected-fg: crust;
+    out property <color> fg-primary: text;
+    out property <color> fg-secondary: subtext0;
+    out property <color> fg-tertiary: overlay1;
+    out property <color> fg-disabled: overlay0;
+    out property <color> accent: mauve;
+    out property <color> folder: blue;
+    out property <color> separator: surface0;
+
+    // Typography
+    out property <string> font: "Noto Sans";
+
+    // Metrics
+    out property <length> toolbar-h: 52px;
+    out property <length> header-h: 56px;
+    out property <length> colheader-h: 28px;
+    out property <length> row-h: 28px;
+    out property <length> sidebar-row-h: 28px;
+    out property <length> radius-window: 12px;
+    out property <duration> fast: 120ms;
+    out property <duration> medium: 180ms;
+}

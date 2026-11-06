@@ -1,0 +1,114 @@
+import { Theme } from "theme.slint";
+import { Icon } from "icons.slint";
+import { SidebarItem } from "types.slint";
+
+component WindowButton inherits Rectangle {
+    in property <color> dot-color;
+    in property <string> glyph;
+    in property <bool> group-hover;
+    callback clicked;
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    background: dot-color;
+    Path {
+        width: 8px;
+        height: 8px;
+        viewbox-width: 8;
+        viewbox-height: 8;
+        stroke: Theme.crust.with-alpha(0.6);
+        stroke-width: 1.2px;
+        visible: group-hover;
+        commands: glyph == "close" ? "M1.5 1.5 L6.5 6.5 M6.5 1.5 L1.5 6.5" : glyph == "min" ? "M1.5 4 H6.5" : "M1.5 4 H6.5 M4 1.5 V6.5";
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+export component Sidebar inherits Rectangle {
+    in property <[SidebarItem]> items;
+    in property <bool> window-active: true;
+    callback item-clicked(string);
+    callback close-window;
+    callback minimize-window;
+    callback maximize-window;
+    callback start-drag;
+    background: Theme.bg-sidebar;
+
+    // Draggable empty area behind everything (top zone).
+    TouchArea {
+        y: 0;
+        height: Theme.toolbar-h;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { root.start-drag(); }
+        }
+        double-clicked => { root.maximize-window(); }
+    }
+
+    hover := TouchArea {
+        x: 14px;
+        y: (Theme.toolbar-h - 20px) / 2;
+        width: 60px;
+        height: 20px;
+        HorizontalLayout {
+            x: 4px;
+            y: 4px;
+            spacing: 8px;
+            height: 12px;
+            width: 52px;
+            WindowButton { dot-color: root.window-active ? Theme.red : Theme.surface1; glyph: "close"; group-hover: hover.has-hover; clicked => { root.close-window(); } }
+            WindowButton { dot-color: root.window-active ? Theme.yellow : Theme.surface1; glyph: "min"; group-hover: hover.has-hover; clicked => { root.minimize-window(); } }
+            WindowButton { dot-color: root.window-active ? Theme.green : Theme.surface1; glyph: "max"; group-hover: hover.has-hover; clicked => { root.maximize-window(); } }
+        }
+    }
+
+    Flickable {
+        y: Theme.toolbar-h;
+        height: parent.height - Theme.toolbar-h;
+        content-height: col.preferred-height;
+        col := VerticalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            padding-bottom: 12px;
+            alignment: start;
+            for it in root.items: Rectangle {
+                height: it.header ? 30px : Theme.sidebar-row-h;
+                if it.header: Text {
+                    x: 8px;
+                    y: parent.height - self.height - 4px;
+                    text: it.label;
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: Theme.fg-tertiary;
+                    font-family: Theme.font;
+                }
+                if !it.header: Rectangle {
+                    border-radius: 6px;
+                    background: it.selected ? Theme.bg-sidebar-selected : ta.has-hover ? Theme.bg-row-hover : transparent;
+                    ta := TouchArea { clicked => { root.item-clicked(it.path); } }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+                        Icon { name: it.icon; color: Theme.accent; size: 16px; y: (parent.height - 16px) / 2; }
+                        Text {
+                            text: it.label;
+                            vertical-alignment: center;
+                            font-size: 13px;
+                            color: Theme.fg-primary;
+                            font-family: Theme.font;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: it.detail;
+                            vertical-alignment: center;
+                            font-size: 11.5px;
+                            color: Theme.fg-secondary;
+                            font-family: Theme.font;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

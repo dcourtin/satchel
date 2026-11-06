@@ -1,0 +1,54 @@
+export struct FileRow {
+    name: string,
+    size: string,
+    date: string,
+    kind: string,
+    is-dir: bool,
+    selected: bool,
+    current: bool,
+    has-thumb: bool,
+    thumb: image,
+}
+
+export struct Crumb {
+    label: string,
+    path: string,
+}
+
+// Scalar pane state only. Models (rows, crumbs) and view-mode are separate properties so that
+// updating the status line never re-instantiates repeaters/conditionals (which would destroy the
+// item holding the mouse grab mid-click).
+export struct PaneData {
+    root-icon: string,
+    status: string,
+    title: string,
+    sort-key: int,  // 0 name, 1 size, 2 modified
+    sort-asc: bool,
+    current: int,
+    message: string,
+    empty: bool,
+}
+
+export struct SidebarItem {
+    header: bool,
+    label: string,
+    path: string,
+    detail: string,
+    icon: string,
+    selected: bool,
+}
+
+export struct InspectorData {
+    mode: int, // 0 = single item, 1 = multiple, 2 = current folder
+    name: string,
+    kind-text: string,
+    kind: string,
+    path: string,
+    size: string,
+    modified: string,
+    created: string,
+    extension: string,
+    hidden: bool,
+    has-preview: bool,
+    preview: image,
+}
