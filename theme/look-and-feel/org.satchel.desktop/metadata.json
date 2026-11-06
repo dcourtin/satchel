@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "David" }],
+        "Category": "",
+        "Description": "Thème inspiré de Satchel : Catppuccin Mocha, accent mauve, Klassy, Kvantum",
+        "Id": "org.satchel.desktop",
+        "License": "GPL-3.0-or-later",
+        "Name": "Satchel",
+        "Version": "0.1"
+    },
+    "X-Plasma-APIVersion": "2"
+}

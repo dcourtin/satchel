@@ -68,3 +68,4 @@ Spec : 02 §7–13 et §17. **Tout dans `satchel-core`, avec des tests.**
 ## Journal des décisions
 - 2026-11-06 : stack Rust + Slint. Nom « Satchel ». Dépôt `~/dev/satchel`.
 - 2026-11-06 : onglets par panneau, deux panneaux permanents, Tab change de panneau (voir `docs/spec/00-index.md`).
+- 2026-11-06 : thème de bureau « Satchel » (`theme/`), qui reprend le design de l'appli dans tout Plasma : jeu de couleurs, Klassy, Kvantum, icônes de fenêtre et thème global. Voir `theme/README.md`.

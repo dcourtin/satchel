@@ -1,0 +1,14 @@
+[Icon Theme]
+Name=Satchel
+Comment=Breeze avec les pictos de fenêtre de Satchel
+Inherits=breeze-dark,breeze,hicolor
+FollowsColorScheme=true
+KDE-Extensions=.svg
+Directories=actions/symbolic
+
+[actions/symbolic]
+Context=Actions
+Size=16
+MinSize=8
+MaxSize=512
+Type=Scalable
