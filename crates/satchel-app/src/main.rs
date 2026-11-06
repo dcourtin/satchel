@@ -60,12 +60,42 @@ fn theme_icons(e: &Entry) -> Option<(Image, Image)> {
             if let Some(img) = images.get(&p) {
                 return Some(img.clone());
             }
-            let img = Image::load_from_path(&p).ok()?;
+            let img = load_themed_icon(&p)?;
             images.insert(p, img.clone());
             Some(img)
         };
         Some((load(small)?, load(large)?))
     })
+}
+
+thread_local! {
+    /// Palette currently applied (from the KDE colour scheme), used to recolour themed icons.
+    static PALETTE: RefCell<satchel_core::kde::Palette> = RefCell::new(satchel_core::kde::Palette::default());
+}
+
+/// Loads an icon file; Breeze SVGs are recoloured with the KDE palette exactly like KIconLoader does
+/// for `ColorScheme-*` classes (FollowsColorScheme), so Satchel's icons match other KDE apps.
+fn load_themed_icon(path: &Path) -> Option<Image> {
+    if path.extension().is_some_and(|e| e == "svg")
+        && let Ok(svg) = std::fs::read_to_string(path)
+            && svg.contains("ColorScheme-") {
+                let css = PALETTE.with(|p| {
+                    let p = p.borrow();
+                    let hex = |(r, g, b): satchel_core::kde::Rgb| format!("#{r:02x}{g:02x}{b:02x}");
+                    format!(
+                        ".ColorScheme-Text{{color:{}}}.ColorScheme-Background{{color:{}}}.ColorScheme-Highlight{{color:{}}}.ColorScheme-HighlightedText{{color:{}}}.ColorScheme-Accent{{color:{}}}.ColorScheme-PositiveText{{color:{}}}.ColorScheme-NeutralText{{color:{}}}.ColorScheme-NegativeText{{color:{}}}",
+                        hex(p.text), hex(p.base), hex(p.selection), hex(p.selection_text), hex(p.accent), hex(p.positive), hex(p.neutral), hex(p.negative)
+                    )
+                });
+                // A later <style> wins over the icon's own stylesheet (same specificity).
+                if let Some(end) = svg.rfind("</svg>") {
+                    let themed = format!("{}<style>{css}</style>{}", &svg[..end], &svg[end..]);
+                    if let Ok(img) = Image::load_from_svg_data(themed.as_bytes()) {
+                        return Some(img);
+                    }
+                }
+            }
+    Image::load_from_path(path).ok()
 }
 
 /// Updates a model in place: rows that differ are replaced; length changes add/remove at the end.
@@ -862,6 +892,58 @@ fn default_favorites(home: &Path) -> Vec<Place> {
     v
 }
 
+/// Applies the KDE colour scheme (kdeglobals) to Satchel's palette — single source of truth.
+fn apply_kde_palette(ui: &MainWindow) {
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    let p = satchel_core::kde::read_palette(&home);
+    PALETTE.with(|cell| *cell.borrow_mut() = p.clone());
+    ICONS.with(|cell| cell.borrow_mut().1.clear()); // recolour icons with the new palette
+    let c = |(r, g, b): satchel_core::kde::Rgb| slint::Color::from_rgb_u8(r, g, b);
+    let t = ui.global::<Theme>();
+    t.set_crust(c(p.crust));
+    t.set_mantle(c(p.mantle));
+    t.set_base(c(p.base));
+    t.set_surface0(c(p.surface0));
+    t.set_surface1(c(p.surface1));
+    t.set_surface2(c(p.surface2));
+    t.set_overlay0(c(p.overlay0));
+    t.set_overlay1(c(p.overlay1));
+    t.set_subtext0(c(p.subtext0));
+    t.set_text(c(p.text));
+    t.set_mauve(c(p.accent));
+    t.set_blue(c(p.selection));
+    t.set_selection(c(p.selection));
+    t.set_selection_text(c(p.selection_text));
+    t.set_red(c(p.negative));
+    t.set_yellow(c(p.neutral));
+    t.set_green(c(p.positive));
+    t.set_peach(c(p.warm));
+}
+
+/// Re-reads kdeglobals when it changes, so a new colour scheme or accent applies live.
+fn watch_kde_palette(ui: &MainWindow) -> slint::Timer {
+    let path = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/kdeglobals");
+    let mtime = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let last = std::cell::Cell::new(mtime(&path));
+    let w = ui.as_weak();
+    let timer = slint::Timer::default();
+    timer.start(slint::TimerMode::Repeated, Duration::from_secs(2), move || {
+        let now = mtime(&path);
+        if now != last.get() {
+            last.set(now);
+            if let Some(ui) = w.upgrade() {
+                apply_kde_palette(&ui);
+                with_app(|a| {
+                    a.load(0);
+                    a.load(1);
+                    a.sync_inspector();
+                });
+            }
+        }
+    });
+    timer
+}
+
 /// Window layout persisted between sessions (spec 05 §1): sidebar/inspector widths, pane split.
 fn layout_file() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -970,6 +1052,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    apply_kde_palette(&ui);
+    let _palette_watch = watch_kde_palette(&ui);
     load_layout(&ui);
     let w = ui.as_weak();
     ui.on_layout_changed(move || {

@@ -109,14 +109,13 @@ fn trash_dir_for(item: &Path, cfg: &TrashConfig) -> Result<TrashDir, TrashError>
     let parent = item.parent().unwrap_or(Path::new("/"));
     let top = topdir_of(parent, dev);
     let shared = top.join(".Trash");
-    if let Ok(m) = fs::symlink_metadata(&shared) {
-        if m.is_dir() && m.permissions().mode() & 0o1000 != 0 {
+    if let Ok(m) = fs::symlink_metadata(&shared)
+        && m.is_dir() && m.permissions().mode() & 0o1000 != 0 {
             let root = shared.join(uid().to_string());
             if ensure_dirs(&root).is_ok() && dev_of(&root).ok() == Some(dev) {
                 return Ok(TrashDir { root, topdir: Some(top) });
             }
         }
-    }
     // 3. $topdir/.Trash-$uid.
     let root = top.join(format!(".Trash-{}", uid()));
     if ensure_dirs(&root).is_ok() && dev_of(&root).ok() == Some(dev) {
@@ -143,13 +142,12 @@ fn decode_path(s: &str) -> PathBuf {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' {
-            if let Some(v) = bytes.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok()) {
+        if bytes[i] == b'%'
+            && let Some(v) = bytes.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok()) {
                 out.push(v);
                 i += 3;
                 continue;
             }
-        }
         out.push(bytes[i]);
         i += 1;
     }

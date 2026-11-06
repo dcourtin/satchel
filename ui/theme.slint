@@ -1,22 +1,24 @@
 // Design tokens — docs/spec/05-design.md §2. Never hard-code colors in components.
 export global Theme {
-    // Catppuccin Mocha palette
-    out property <color> crust: #11111b;
-    out property <color> mantle: #181825;
-    out property <color> base: #1e1e2e;
-    out property <color> surface0: #313244;
-    out property <color> surface1: #45475a;
-    out property <color> surface2: #585b70;
-    out property <color> overlay0: #6c7086;
-    out property <color> overlay1: #7f849c;
-    out property <color> subtext0: #a6adc8;
-    out property <color> text: #cdd6f4;
-    out property <color> mauve: #cba6f7;
-    out property <color> blue: #89b4fa;
-    out property <color> red: #f38ba8;
-    out property <color> peach: #fab387;
-    out property <color> yellow: #f9e2af;
-    out property <color> green: #a6e3a1;
+    // Palette — set at runtime from the KDE colour scheme (kdeglobals); Catppuccin Mocha = fallback.
+    in-out property <color> crust: #11111b;
+    in-out property <color> mantle: #181825;
+    in-out property <color> base: #1e1e2e;
+    in-out property <color> surface0: #313244;
+    in-out property <color> surface1: #45475a;
+    in-out property <color> surface2: #585b70;
+    in-out property <color> overlay0: #6c7086;
+    in-out property <color> overlay1: #7f849c;
+    in-out property <color> subtext0: #a6adc8;
+    in-out property <color> text: #cdd6f4;
+    in-out property <color> mauve: #cba6f7;
+    in-out property <color> blue: #89b4fa;
+    in-out property <color> red: #f38ba8;
+    in-out property <color> peach: #fab387;
+    in-out property <color> yellow: #f9e2af;
+    in-out property <color> green: #a6e3a1;
+    in-out property <color> selection: #89b4fa;      // KDE selection background (derived from the accent)
+    in-out property <color> selection-text: #11111b;
 
     // Semantic tokens
     out property <color> bg-sidebar: mantle.with-alpha(0.97);
@@ -27,17 +29,17 @@ export global Theme {
     out property <color> bg-capsule-hover: surface1;
     out property <color> bg-capsule-pressed: surface2;
     out property <color> bg-row-hover: text.with-alpha(0.04);
-    out property <color> bg-row-selected: blue.with-alpha(0.22);
+    out property <color> bg-row-selected: selection.with-alpha(0.35);
     out property <color> bg-row-selected-inactive: text.with-alpha(0.08);
     out property <color> bg-sidebar-selected: text.with-alpha(0.10);
-    out property <color> label-selected-bg: blue;
-    out property <color> label-selected-fg: crust;
+    out property <color> label-selected-bg: selection;
+    out property <color> label-selected-fg: selection-text;
     out property <color> fg-primary: text;
     out property <color> fg-secondary: subtext0;
     out property <color> fg-tertiary: overlay1;
     out property <color> fg-disabled: overlay0;
     out property <color> accent: mauve;
-    out property <color> folder: blue;
+    out property <color> folder: mauve;
     out property <color> separator: surface0;
 
     // Typography

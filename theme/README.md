@@ -1,21 +1,29 @@
 # Thème de bureau Satchel
 
-C'est le prolongement du design de Satchel (`docs/spec/05-design.md`) à tout Plasma : Catppuccin Mocha avec un accent mauve, des boutons de fenêtre façon feux tricolores et des widgets épurés.
+## Principe : une seule source de vérité
+**Tout dérive du jeu de couleurs KDE (« Satchel », basé sur Catppuccin Mocha) et de la couleur d'accent**, réglés dans *Configuration du système → Couleurs et thèmes*. Aucune pièce ne contient de couleur en dur : si tu changes le jeu de couleurs ou l'accent, tout suit, **y compris l'appli Satchel**, qui relit `kdeglobals` en direct.
 
-| Pièce | Fichier | Destination |
+| Pièce | Fichier | Comment elle suit KDE |
 |---|---|---|
-| Jeu de couleurs | `color-schemes/Satchel.colors` | `~/.local/share/color-schemes/` |
-| Décoration de fenêtre (Klassy) | `klassy/klassyrc` | `~/.config/klassy/` |
-| Style des widgets (Kvantum) | `kvantum/Satchel/` | `~/.config/Kvantum/` |
-| Icônes de fenêtre (le reste vient de Breeze) | `icons/Satchel/` | `~/.local/share/icons/` |
-| Thème global | `look-and-feel/org.satchel.desktop/` | `~/.local/share/plasma/look-and-feel/` |
+| Jeu de couleurs | `color-schemes/Satchel.colors` | C'est la source |
+| Décoration de fenêtre (Klassy) | `klassy/klassyrc` | Les pastilles référencent le jeu de couleurs : `["NegativeText"]`, `["NeutralText"]`, `["PositiveText"]`. Fenêtre inactive : `["TitleBarTextInactive",30]` |
+| Style des widgets (Klassy) | `klassy/klassyrc` `[Style]` | Style dérivé de Breeze : il utilise la palette KDE (arrondis de 8 px, barres de défilement fines) |
+| Icônes | `icons/Satchel/` (hérite de Breeze) | Les emplacements et les disques utilisent `ColorScheme-Highlight`, recolorée par Plasma. Les pictos de fenêtre sont recolorés par Klassy |
+| Applis GTK et Firefox | généré par `kde-gtk-config` | Le thème Breeze GTK lit `~/.config/gtk-3.0/colors.css`, que KDE génère depuis le jeu de couleurs. Firefox (Flatpak) y a accès en lecture et utilise la barre de titre de KWin (`firefox/user.js`) |
+| Satchel | `crates/satchel-core/src/kde.rs` | Palette lue dans `kdeglobals` ; icônes Breeze recolorées comme le fait KIconLoader (`ColorScheme-Text`, `-Accent`, `-Highlight`…) |
+| Thème global | `look-and-feel/org.satchel.desktop/` | Regroupe tout le reste et s'applique d'un clic |
 
-Installation : `./install.sh`, ou `./install.sh --apply` pour l'appliquer aussitôt. Il faut avoir installé `klassy` (AUR) et `kvantum`.
+Installation : `./install.sh`, ou `./install.sh --apply` pour l'appliquer aussitôt. Il faut avoir installé `klassy` (AUR). Pour Firefox, copier `firefox/user.js` dans le profil, puis choisir le thème « Système – automatique ».
 
-## Notes et pièges
-- **Pourquoi Klassy et pas Aurorae :** dans Aurorae, la largeur du coin du cadre SVG est égale à celle de la bordure. Arrondir le haut de la fenêtre de 10 px demanderait donc des bordures de 10 px.
-- **Couleurs des boutons Klassy :** elles sont imposées par `ButtonOverrideColors{Active,Inactive}{Close,Minimize,Maximize}`. Le format est un objet JSON état → `[R,G,B]` ou `[opacité %,R,G,B]` (voir `decorationbuttoncolors.cpp`, Klassy 6.7.3). **Klassy ne recalcule ces couleurs qu'au changement de jeu de couleurs** : il faut basculer sur un autre jeu de couleurs puis revenir.
-- **Taille des boutons :** `ButtonIconStyle=StyleSystemIconTheme` avec `SystemIconSize=SystemIcon8` et `ScaleBackgroundPercent=150` donnent des pastilles de 12 px, comme dans Satchel. L'écart est réglé par `ButtonSpacingLeft=5`.
-- **Thème d'icônes :** `index.theme` doit contenir `FollowsColorScheme=true`. Sans cette ligne, les icônes héritées de Breeze ne sont pas recolorées et deviennent illisibles sur fond sombre.
-- **Kvantum** dérive du thème officiel Catppuccin Mocha Mauve (MIT, voir `kvantum/Satchel/LICENSE-catppuccin`). Les changements : sélection bleu `#89b4fa` à 22 %, fenêtres en mantle et listes en base, pas de rectangle de focus ni de traits d'arborescence.
-- **Barre latérale de Dolphin :** icônes en 16 px (`dolphinrc [PlacesPanel] IconSize=16`). Les icônes d'emplacements et de disques sont en mauve grâce aux copies recolorées dans `icons/Satchel/{places,devices}/16`, sans classe `ColorScheme-*` pour que Plasma ne les recolore pas. Le dossier générique reste blanc. On ne peut pas changer l'ordre des sections, la hauteur des lignes ni le fond du panneau : `KFilePlacesView` les impose.
+## Ce qui a été essayé puis abandonné (et pourquoi)
+- **Kvantum** : il impose sa propre palette à chaque appli et ignore le jeu de couleurs KDE. Il a été retiré parce qu'il cassait la cohérence (par exemple, des icônes recolorées dans le bleu de sa sélection au lieu de l'accent).
+- **`userChrome.css` pour Firefox** : les couleurs y étaient en dur et sans lien avec KDE. Il est remplacé par la barre de titre de KWin.
+- **Aurorae** : dans un cadre SVG, la largeur du coin est égale à celle de la bordure. Arrondir de 10 px demanderait donc des bordures de 10 px.
+- **Codes couleur en dur dans Klassy et dans les icônes** : remplacés par des références au jeu de couleurs.
+
+## Pièges
+- **Klassy ne recalcule les couleurs de ses boutons qu'au changement de jeu de couleurs** : il faut basculer sur un autre jeu de couleurs puis revenir. `install.sh --apply` le fait.
+- **Format des couleurs imposées dans Klassy** (`decorationbuttoncolors.cpp`, 6.7.3) : un objet JSON état → `["NomDeCouleur"]`, `["NomDeCouleur", opacité %]`, `[R,G,B]` ou `[opacité %,R,G,B]`.
+- **Taille des boutons :** `ButtonIconStyle=StyleSystemIconTheme`, `SystemIconSize=SystemIcon8` et `ScaleBackgroundPercent=150` donnent des pastilles de 12 px. L'écart est réglé par `ButtonSpacingLeft=5`.
+- **`index.theme` doit contenir `FollowsColorScheme=true`.** Sans cette ligne, les icônes héritées ne sont pas recolorées.
+- **Dolphin :** la barre latérale garde ses réglages par défaut. Les sections masquées se règlent par clic droit et sont stockées dans `user-places.xbel`, partagé par KDE.
